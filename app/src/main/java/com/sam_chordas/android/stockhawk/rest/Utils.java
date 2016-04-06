@@ -2,12 +2,15 @@ package com.sam_chordas.android.stockhawk.rest;
 
 import android.content.ContentProviderOperation;
 import android.util.Log;
+
 import com.sam_chordas.android.stockhawk.data.QuoteColumns;
 import com.sam_chordas.android.stockhawk.data.QuoteProvider;
-import java.util.ArrayList;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.util.ArrayList;
 
 /**
  * Created by sam_chordas on 10/8/15.
@@ -22,21 +25,39 @@ public class Utils {
     ArrayList<ContentProviderOperation> batchOperations = new ArrayList<>();
     JSONObject jsonObject = null;
     JSONArray resultsArray = null;
+
     try{
       jsonObject = new JSONObject(JSON);
+
       if (jsonObject != null && jsonObject.length() != 0){
         jsonObject = jsonObject.getJSONObject("query");
         int count = Integer.parseInt(jsonObject.getString("count"));
+
         if (count == 1){
-          jsonObject = jsonObject.getJSONObject("results")
-              .getJSONObject("quote");
+          jsonObject = jsonObject.getJSONObject("results").getJSONObject("quote");
+
+          // Make sure we have a valid symbol here, otherwise get out
+          String change = jsonObject.getString("Change");
+          if (change == "null") {
+            batchOperations = null;
+            return batchOperations;
+          }
+
+
           batchOperations.add(buildBatchOperation(jsonObject));
+
         } else{
           resultsArray = jsonObject.getJSONObject("results").getJSONArray("quote");
+          if (resultsArray != null && resultsArray.length() != 0) {
 
-          if (resultsArray != null && resultsArray.length() != 0){
             for (int i = 0; i < resultsArray.length(); i++){
               jsonObject = resultsArray.getJSONObject(i);
+
+              // Make sure we have a valid symbol here, otherwise get out
+              String change = jsonObject.getString("Change");
+              if (change == "null")
+                continue;
+
               batchOperations.add(buildBatchOperation(jsonObject));
             }
           }
@@ -49,11 +70,17 @@ public class Utils {
   }
 
   public static String truncateBidPrice(String bidPrice){
+    if (bidPrice == "null")
+      return "N/A";
+
     bidPrice = String.format("%.2f", Float.parseFloat(bidPrice));
     return bidPrice;
   }
 
   public static String truncateChange(String change, boolean isPercentChange){
+    if(change == "null")
+      return "N/A";
+
     String weight = change.substring(0,1);
     String ampersand = "";
     if (isPercentChange){
@@ -71,14 +98,13 @@ public class Utils {
   }
 
   public static ContentProviderOperation buildBatchOperation(JSONObject jsonObject){
-    ContentProviderOperation.Builder builder = ContentProviderOperation.newInsert(
-        QuoteProvider.Quotes.CONTENT_URI);
+    ContentProviderOperation.Builder builder = ContentProviderOperation.newInsert(QuoteProvider.Quotes.CONTENT_URI);
+
     try {
       String change = jsonObject.getString("Change");
       builder.withValue(QuoteColumns.SYMBOL, jsonObject.getString("symbol"));
       builder.withValue(QuoteColumns.BIDPRICE, truncateBidPrice(jsonObject.getString("Bid")));
-      builder.withValue(QuoteColumns.PERCENT_CHANGE, truncateChange(
-          jsonObject.getString("ChangeinPercent"), true));
+      builder.withValue(QuoteColumns.PERCENT_CHANGE, truncateChange( jsonObject.getString("ChangeinPercent"), true) );
       builder.withValue(QuoteColumns.CHANGE, truncateChange(change, false));
       builder.withValue(QuoteColumns.ISCURRENT, 1);
       if (change.charAt(0) == '-'){
